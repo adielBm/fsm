@@ -32,6 +32,12 @@ const DFAGenerator: React.FC = () => {
   const tikzCodeOutputRef = useRef<HTMLTextAreaElement>(null);
   const tikzDiagramRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    renderTikz(tikzCode);
+    if (tikzCodeOutputRef.current) {
+      resizeTextarea(tikzCodeOutputRef.current);
+    }
+  }, [tikzCode]);
 
   useEffect(() => {
     const script = document.createElement("script");
@@ -51,15 +57,7 @@ const DFAGenerator: React.FC = () => {
     }, 500); // Adjust delay as needed (e.g., 300-500ms)
 
     return () => clearTimeout(handler); // Cleanup timeout on each keystroke
-  }, [states, initialState, acceptingStates, transitions, nodeDistance, innerSep, bendAngle, shorten, initialText, initialWhere, acceptingBy, arrowType, nodeColor, lineWidth
-  ]);
-
-
-  useEffect(() => {
-    if (tikzCodeOutputRef.current) {
-      resizeTextarea(tikzCodeOutputRef.current);
-    }
-  }, [tikzCode]);
+  }, [states, initialState, acceptingStates, transitions, nodeDistance, innerSep, bendAngle, shorten, initialText, initialWhere, acceptingBy, arrowType, nodeColor, lineWidth]);
 
   const resizeTextarea = (element: HTMLTextAreaElement) => {
     element.style.height = 'auto';
@@ -117,7 +115,6 @@ const DFAGenerator: React.FC = () => {
   };
 
   const generate = () => {
-    console.log('generate');
     const acceptingStatesArray = acceptingStates.split(',').map(s => s.trim());
     let code = `\\usepackage{tikz}\n\\usetikzlibrary{automata, arrows.meta, positioning}\n\\begin{document}\n\\begin{tikzpicture}`;
 
@@ -204,43 +201,10 @@ const DFAGenerator: React.FC = () => {
     });
 
     code += `\\end{tikzpicture}\n\\end{document}`;
-
     setTikzCode(code);
-
-    console.log(code);
-
-
-
-    // if (!window.tikzjax) {
-    //   console.error(window.tikzjax);
-    // }
-
-    // // In a real implementation, we'd need to handle TikZJax rendering here
-    // if (tikzDiagramRef.current && window.tikzjax) {
-    //   // Clear previous diagram
-    //   tikzDiagramRef.current.innerHTML = '';
-
-    //   // Create a script element with the TikZ code
-    //   const script = document.createElement('script');
-    //   script.setAttribute('type', 'text/tikz');
-    //   script.setAttribute('data-show-console', 'true');
-    //   script.textContent = code;
-
-    //   // Append the script to the diagram container
-    //   tikzDiagramRef.current.appendChild(script);
-
-    //   // Trigger TikZJax to render the diagram
-    //   try {
-    //     window.tikzjax.process(tikzDiagramRef.current);
-    //   } catch (error) {
-    //     console.error('Error rendering TikZ diagram:', error);
-    //   }
-    // }
   };
 
-  useEffect(() => {
-    renderTikz(tikzCode);
-  }, [tikzCode]);
+
 
   const renderTikz = (code: string | null) => {
     if (!window.tikzjax) {
@@ -317,7 +281,7 @@ const DFAGenerator: React.FC = () => {
 
   return (
     <div className="container mx-auto p-2 max-w-3xl">
-      <h1 className="text-xl font-bold mb-4 text-center">DFA State Diagram Generator</h1>
+      <h1 className="font-bold mb-4 text-center">DFA State Diagram Generator</h1>
       <form className="space-y-2">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
@@ -541,10 +505,10 @@ const DFAGenerator: React.FC = () => {
             rel="noopener noreferrer"
             className="text-blue-500 hover:text-blue-700"
           >
-            https://github.com/adielBm/tikz-automata-generator
+            github.com/adielBm/tikz-automata-generator
           </a>
         </div>
-        <div>
+        <div>docs: 
           <a
             href="https://tikz.dev/library-automata"
             target="_blank"
