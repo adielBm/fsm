@@ -498,12 +498,12 @@ const DFAGenerator: React.FC = () => {
         <div>
           source:
           <a
-            href="https://github.com/adielBm/tikz-automata-generator/tree/main"
+            href="https://github.com/adielBm/dfa/"
             target="_blank"
             rel="noopener noreferrer"
             className="text-blue-500 hover:text-blue-700"
           >
-            github.com/adielBm/tikz-automata-generator
+            github.com/adielBm/dfa
           </a>
         </div>
         <div>docs: 
