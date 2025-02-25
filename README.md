@@ -1,2 +1,4 @@
 - https://tikz.dev/library-automata
-- `tikz.css` and `tikzjax` are from https://github.com/artisticat1/obsidian-tikzjax
+- `tikz.css` and `tikzjax.js` are from https://github.com/artisticat1/obsidian-tikzjax
+- source on `main`branch
+- static on `gh-pages` branch, (run `npm run deploy` to deploy)

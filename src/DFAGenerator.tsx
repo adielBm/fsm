@@ -1,8 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 import tikzjaxJs from "./tikzjax.js?raw"; // For Vite (bundler must support ?raw)
-
-// import 'tikzjax.js' (in src/tikzjax.js) to use in window.tikzjax below
 
 interface Transition {
   [symbol: string]: string;
