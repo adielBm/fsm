@@ -1,11 +1,11 @@
 import './App.css'
-import DFAGenerator from './DFAGenerator'
+import Generator from './Generator'
 
 function App() {
 
   return (
     <>
-      <DFAGenerator />
+      <Generator />
     </>
   )
 }

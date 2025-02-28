@@ -4,8 +4,7 @@
 @tailwind utilities;
 
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
+    line-height: 1.5;
   font-weight: 400;
 }
 
@@ -15,13 +14,27 @@ body {
   place-items: center;
   min-width: 320px;
   min-height: 100vh;
-  background: rgb(233, 233, 233);
+  background: rgb(209, 212, 217);
 
 }
 
 textarea, input, select {
   background-color: #fff;
   transition: border-color 0.25s;
+}
+
+label {
+  display: block;
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+a {
+  color: #0070f3;
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
 }
 
 h1 {
@@ -48,6 +61,38 @@ button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
 
+textarea:focus-visible {
+  border: none !important;
+}
+
 text {
   fill: currentColor;
 }
+
+
+.app {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+input, select, #transitions-editor, #tikz-editor  {
+  font-family: "Fira Mono";
+  box-shadow: inset 3px 3px 7px 0px #ccc;
+  border: 1px solid #585858;
+  overflow: hidden;
+  border-radius: 5px;
+}
+
+code {
+  font-family: "Fira Mono";
+}
+
+
+
+/* inerse colors  */
+/* @media (prefers-color-scheme: dark) {
+  html {
+    filter: invert(1) hue-rotate(180deg);
+  }
+} */

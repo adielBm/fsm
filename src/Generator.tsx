@@ -1,16 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 import tikzjaxJs from "./tikzjax.js?raw"; // For Vite (bundler must support ?raw)
+import Editor from "react-simple-code-editor";
+import Prism from "prismjs";
+import "prismjs/themes/prism.css";
+import { highlight, languages } from 'prismjs';
+import 'prismjs/components/prism-latex';
+import 'prismjs/components/prism-ada';
+
 
 interface Transition {
-  [symbol: string]: string;
+  [symbol: string]: string[];
 }
 
 interface Transitions {
   [fromState: string]: Transition;
 }
 
-const DFAGenerator: React.FC = () => {
+const Generator: React.FC = () => {
   const [states, setStates] = useState<string>('q1, q2; q3');
   const [initialState, setInitialState] = useState<string>('q1');
   const [acceptingStates, setAcceptingStates] = useState<string>('q2,q3');
@@ -26,15 +33,10 @@ const DFAGenerator: React.FC = () => {
   const [nodeColor, setNodeColor] = useState<string>('blue');
   const [lineWidth, setLineWidth] = useState<string>('semithick');
   const [tikzCode, setTikzCode] = useState<string>('');
-
-  const tikzCodeOutputRef = useRef<HTMLTextAreaElement>(null);
   const tikzDiagramRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     renderTikz(tikzCode);
-    if (tikzCodeOutputRef.current) {
-      resizeTextarea(tikzCodeOutputRef.current);
-    }
   }, [tikzCode]);
 
   useEffect(() => {
@@ -57,10 +59,6 @@ const DFAGenerator: React.FC = () => {
     return () => clearTimeout(handler); // Cleanup timeout on each keystroke
   }, [states, initialState, acceptingStates, transitions, nodeDistance, innerSep, bendAngle, shorten, initialText, initialWhere, acceptingBy, arrowType, nodeColor, lineWidth]);
 
-  const resizeTextarea = (element: HTMLTextAreaElement) => {
-    element.style.height = 'auto';
-    element.style.height = `${element.scrollHeight}px`;
-  };
 
   const createTransitions = (transitionString: string): Transitions => {
     const transitionsList = transitionString.trim().split(';').filter(line => line.trim() !== '');
@@ -75,8 +73,10 @@ const DFAGenerator: React.FC = () => {
       if (!transitions[fromState]) {
         transitions[fromState] = {};
       }
-
-      transitions[fromState][symbols.join(',')] = toState;
+      if (!transitions[fromState][symbols.join(',')]) {
+        transitions[fromState][symbols.join(',')] = [];
+      }
+      transitions[fromState][symbols.join(',')].push(toState);
     });
 
     return transitions;
@@ -86,7 +86,7 @@ const DFAGenerator: React.FC = () => {
     const symbols: string[] = [];
     if (transitions[s1]) {
       for (const symbol in transitions[s1]) {
-        if (transitions[s1][symbol] === s2) {
+        if (transitions[s1][symbol].includes(s2)) {
           symbols.push(symbol);
         }
       }
@@ -170,6 +170,9 @@ const DFAGenerator: React.FC = () => {
 
     // Generate transitions
     const transitionsObj = createTransitions(transitions);
+    console.log(transitionsObj);
+
+
 
     statesArray.forEach((fromState, fromIndex) => {
       statesArray.forEach((toState, toIndex) => {
@@ -232,9 +235,7 @@ const DFAGenerator: React.FC = () => {
   }
 
   const copyToClipboard = () => {
-    if (tikzCodeOutputRef.current) {
-      tikzCodeOutputRef.current.select();
-      document.execCommand('copy');
+    navigator.clipboard.writeText(tikzCode).then(() => {
       const button = document.getElementById('copyToClipboard');
       if (button) {
         button.textContent = 'Copied!';
@@ -242,7 +243,7 @@ const DFAGenerator: React.FC = () => {
           button.textContent = 'Copy to Clipboard';
         }, 2000);
       }
-    }
+    });
   };
 
   const exportSVG = () => {
@@ -279,11 +280,15 @@ const DFAGenerator: React.FC = () => {
 
   return (
     <div className="container mx-auto p-2 max-w-3xl">
-      <h1 className="font-bold mb-4 text-center">DFA State Diagram Generator</h1>
+      <h1 className="font-bold text-center">Finite Automaton Diagram Generator</h1>
+      <p className="text-center text-gray-500">
+        Generate <a href="https://en.wikipedia.org/wiki/PGF/TikZ" target="_blank" rel="noopener noreferrer">TikZ</a> (with <a href="https://tikz.dev/library-automata" target="_blank" rel="noopener noreferrer">automata</a> library) code for a diagram of <a href="https://en.wikipedia.org/wiki/Finite-state_machine" target="_blank">finite automaton</a> (DFA/NFA).
+      </p>
+      <hr className='my-4'></hr>
       <form className="space-y-2">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm font-medium" htmlFor="states">
+            <label htmlFor="states">
               States: <code className="text-gray-500">state1, state2, ...</code>
             </label>
             <input
@@ -296,7 +301,7 @@ const DFAGenerator: React.FC = () => {
             <br />(use <code className="text-gray-500">;</code> for row break)
           </div>
           <div>
-            <label className="block text-sm font-medium" htmlFor="initialState">
+            <label htmlFor="initialState">
               Initial State:
             </label>
             <input
@@ -308,7 +313,7 @@ const DFAGenerator: React.FC = () => {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium" htmlFor="acceptingStates">
+            <label htmlFor="acceptingStates">
               Accepting States:
             </label>
             <input
@@ -320,22 +325,22 @@ const DFAGenerator: React.FC = () => {
             />
           </div>
         </div>
-        <label className="block text-sm font-medium" htmlFor="transitions">
+        <label htmlFor="transitions">
           Transitions: <code className="text-gray-500">fromState, symbol1, ... , toState; ...</code>
         </label>
-        <textarea
-          className="w-full p-2 border border-gray-300 rounded-lg h-32"
-          id="transitions"
+        <Editor
+          id="transitions-editor"
+          className="w-full"
           value={transitions}
-          onChange={(e) => {
-            setTransitions(e.target.value);
-            resizeTextarea(e.target);
-          }}
+          onValueChange={(code) => setTransitions(code)}
+          highlight={(code) => Prism.highlight(code, languages.ada, 'ada')}
+          padding={10}
+          style={{ fontFamily: "monospace", backgroundColor: "white", fontSize: 14 }}
         />
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-gray-300 p-4 rounded-lg">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-gray-200 p-4 rounded-lg">
           <h3 className="text-lg font-semibold">Style Options:</h3>
           <div>
-            <label className="block text-sm font-medium" htmlFor="nodeDistance">
+            <label htmlFor="nodeDistance">
               Node Distance:
             </label>
             <input
@@ -347,7 +352,7 @@ const DFAGenerator: React.FC = () => {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium" htmlFor="innerSep">
+            <label htmlFor="innerSep">
               Inner Sep:
             </label>
             <input
@@ -359,7 +364,7 @@ const DFAGenerator: React.FC = () => {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium" htmlFor="bendAngle">
+            <label htmlFor="bendAngle">
               Bend Angle:
             </label>
             <input
@@ -371,7 +376,7 @@ const DFAGenerator: React.FC = () => {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium" htmlFor="shorten">
+            <label htmlFor="shorten">
               Shorten:
             </label>
             <input
@@ -383,7 +388,7 @@ const DFAGenerator: React.FC = () => {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium" htmlFor="initialText">
+            <label htmlFor="initialText">
               Initial Text:
             </label>
             <input
@@ -395,7 +400,7 @@ const DFAGenerator: React.FC = () => {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium" htmlFor="initialWhere">
+            <label htmlFor="initialWhere">
               Initial Where:
             </label>
             <select
@@ -411,7 +416,7 @@ const DFAGenerator: React.FC = () => {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium" htmlFor="acceptingBy">
+            <label htmlFor="acceptingBy">
               Accepting By:
             </label>
             <select
@@ -425,7 +430,7 @@ const DFAGenerator: React.FC = () => {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium" htmlFor="arrowType">
+            <label htmlFor="arrowType">
               Arrow Type:
             </label>
             <select
@@ -439,7 +444,7 @@ const DFAGenerator: React.FC = () => {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium" htmlFor="nodeColor">
+            <label htmlFor="nodeColor">
               Node Color:
             </label>
             <input
@@ -451,7 +456,7 @@ const DFAGenerator: React.FC = () => {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium" htmlFor="lineWidth">
+            <label htmlFor="lineWidth">
               Line Width:
             </label>
             <select
@@ -486,39 +491,29 @@ const DFAGenerator: React.FC = () => {
           Export SVG
         </button>
       </div>
-      <textarea
-        id="tikzCodeOutput"
-        ref={tikzCodeOutputRef}
-        className="mt-6 resize-none w-full p-2 border border-gray-300 rounded-md"
+      <Editor
+        id="tikz-editor"
+        className="mt-6"
         value={tikzCode}
-        onChange={(e) => setTikzCode(e.target.value)}
-
+        onValueChange={(code) => setTikzCode(code)}
+        highlight={(code) => highlight(code, languages.latex, 'latex')}
+        padding={10}
+        style={{ fontFamily: "monospace", backgroundColor: "white" }}
       />
       <footer className="text-center m-8 text-gray-500">
         <div>
-          source:
-          <a
+          source code: <a
             href="https://github.com/adielBm/dfa/"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-blue-500 hover:text-blue-700"
           >
             github.com/adielBm/dfa
           </a>
         </div>
-        <div>docs: 
-          <a
-            href="https://tikz.dev/library-automata"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-500 hover:text-blue-700"
-          >
-            tikz.dev/library-automata
-          </a>
-        </div>
+
       </footer>
     </div>
   );
 };
 
-export default DFAGenerator;
+export default Generator;
