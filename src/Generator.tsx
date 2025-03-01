@@ -8,7 +8,6 @@ import { highlight, languages } from 'prismjs';
 import 'prismjs/components/prism-latex';
 import 'prismjs/components/prism-ada';
 
-
 interface Transition {
   [symbol: string]: string[];
 }
@@ -17,26 +16,116 @@ interface Transitions {
   [fromState: string]: Transition;
 }
 
+function getPermutations<T>(arr: T[]): T[][] {
+  if (arr.length === 0) return [[]];
+  return arr.flatMap((v, i) =>
+    getPermutations([...arr.slice(0, i), ...arr.slice(i + 1)]).map(p => [v, ...p])
+  );
+}
+
+function calculateTransitionCost(statePositions: Record<string, [number, number]>, transitions: Record<string, Record<string, string[]>>): number {
+  let totalCost = 0;
+
+  for (const fromState in transitions) {
+    for (const symbol in transitions[fromState]) {
+      for (const toState of transitions[fromState][symbol]) {
+        if (fromState in statePositions && toState in statePositions) {
+          const [x1, y1] = statePositions[fromState];
+          const [x2, y2] = statePositions[toState];
+          totalCost += Math.abs(x1 - x2) + Math.abs(y1 - y2); // Manhattan Distance
+        }
+      }
+    }
+  }
+  return totalCost;
+}
+
+function findOptimalStatePlacement(states: string[], initState: string, acceptingStates: string[], transitions: Record<string, Record<string, string[]>>): string[][] {
+  const n = states.length;
+  const gridSize = Math.ceil(Math.sqrt(n));
+
+  const allPermutations = getPermutations(states)
+
+  let bestGrid: string[][] = [];
+  let minCost = Infinity;
+
+  let count = 0;
+
+  for (const perm of allPermutations) {
+    const grid: string[][] = Array.from({ length: gridSize }, () => Array(gridSize).fill(null));
+    const statePositions: Record<string, [number, number]> = {};
+
+    perm.forEach((state, index) => {
+      const row = Math.floor(index / gridSize);
+      const col = index % gridSize;
+      grid[row][col] = state;
+      statePositions[state] = [row, col];
+    });
+
+    if (count % 1000 === 0) {
+      console.log('count', count);
+      console.log('grid');
+      console.log(grid);
+    }
+    count++;
+
+    // Check if the initial state is on the some leftmost column of some row, if not, ignore this permutation
+    if (!grid.some(row => row[0] === initState)) continue;
+    // Check if not(every non-null-rightmost element of each row is an accepting state) && (some row has accepting state as element that is not non-null-rightmost element)
+    if (!grid.every((row) => {
+      // first find the rightmost element of the row that is not null, if there is no such element, return true
+      const rightmost = row.findLastIndex(cell => cell !== null);
+      return acceptingStates.includes(row[rightmost]) || rightmost === -1;
+    }) && grid.some((row) => {
+      const rightmost = row.findLastIndex(cell => cell !== null);
+      // loop through the row from 0 to rightmost (exclusive) and check if there is an accepting state
+      if (rightmost === -1) return false;
+      return row.slice(0, rightmost).some(cell => acceptingStates.includes(cell) && cell !== initState);
+    })) continue;
+
+    const cost = calculateTransitionCost(statePositions, transitions);
+    if (cost < minCost) {
+      minCost = cost;
+      bestGrid = grid;
+    }
+  }
+
+  return bestGrid;
+}
+
+
 const Generator: React.FC = () => {
-  const [states, setStates] = useState<string>('q1, q2; q3');
+  const [states, setStates] = useState<string>('q1, q2, q3, q4');
   const [initialState, setInitialState] = useState<string>('q1');
-  const [acceptingStates, setAcceptingStates] = useState<string>('q2,q3');
-  const [transitions, setTransitions] = useState<string>('q1, 0, q1; \nq1, 1, q2; \nq2, 1, 0, q2; \nq3, 0, 1, q2;');
-  const [nodeDistance, setNodeDistance] = useState<number>(80);
+  const [acceptingStates, setAcceptingStates] = useState<string>('q3,q2');
+  const [transitions, setTransitions] = useState<string>('q3, 1, q2;\nq1, 0, 1, q1;\nq1, 1, q2;\nq2, 0, 1, q3;\nq3, 0, 1, q4;\nq4, 0, 1, q4;\nq2, 1, q4;');
+  // style options
+  const [nodeDistance, setNodeDistance] = useState<number>(120);
   const [innerSep, setInnerSep] = useState<number>(4);
   const [bendAngle, setBendAngle] = useState<number>(30);
   const [shorten, setShorten] = useState<number>(3);
   const [initialText, setInitialText] = useState<string>('start');
   const [initialWhere, setInitialWhere] = useState<string>('left');
   const [acceptingBy, setAcceptingBy] = useState<string>('accepting by double');
+  const [doubleDistance, setDoubleDistance] = useState<number>(1.5);
   const [arrowType, setArrowType] = useState<string>('Stealth[round]');
-  const [nodeColor, setNodeColor] = useState<string>('blue');
-  const [lineWidth, setLineWidth] = useState<string>('semithick');
+  // colors
+  const [nodeFillColor, setNodeFillColor] = useState<string | null>('f0f0f0')
+  const [nodeBorderColor, setNodeBorderColor] = useState<string | null>(null)
+  const [edgeColor, setEdgeColor] = useState<string | null>(null)
+
+  const [lineWidth, setLineWidth] = useState<string>('thick');
   const [tikzCode, setTikzCode] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
   const tikzDiagramRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    renderTikz(tikzCode);
+    setLoading(true);
+    const handler = setTimeout(() => {
+      renderTikz(tikzCode);
+      setLoading(false);
+    }, 1000);
+    return () => clearTimeout(handler);
   }, [tikzCode]);
 
   useEffect(() => {
@@ -52,12 +141,13 @@ const Generator: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    setLoading(true);
     const handler = setTimeout(() => {
       generate(); // Run generate() after user stops typing
     }, 500); // Adjust delay as needed (e.g., 300-500ms)
 
     return () => clearTimeout(handler); // Cleanup timeout on each keystroke
-  }, [states, initialState, acceptingStates, transitions, nodeDistance, innerSep, bendAngle, shorten, initialText, initialWhere, acceptingBy, arrowType, nodeColor, lineWidth]);
+  }, [states, initialState, acceptingStates, transitions, nodeDistance, innerSep, bendAngle, shorten, initialText, initialWhere, acceptingBy,doubleDistance,arrowType, nodeFillColor, lineWidth, nodeBorderColor, edgeColor]);
 
 
   const createTransitions = (transitionString: string): Transitions => {
@@ -103,18 +193,102 @@ const Generator: React.FC = () => {
     return 0;
   };
 
-  const areElementsNextToEachOther = (arr: string[], e1: string, e2: string) => {
-    for (let i = 0; i < arr.length - 1; i++) {
-      if ((arr[i] === e1 && arr[i + 1] === e2) || (arr[i] === e2 && arr[i + 1] === e1)) {
-        return true;
+  const getEdge = (grid: string[][], item: string): string | null => {
+    // Iterate over the grid to find the position of the item
+    for (let i = 0; i < grid.length; i++) {
+      for (let j = 0; j < grid[i].length; j++) {
+        if (grid[i][j] === item) {
+          // Check for each direction (top, bottom, left, right)
+
+          // Top edge
+          if (i === 0 || grid[i - 1][j] === null) {
+            return "above";
+          }
+          // Bottom edge
+          if (i === grid.length - 1 || grid[i + 1][j] === null) {
+            return "below";
+          }
+          // Left edge
+          if (j === 0 || grid[i][j - 1] === null) {
+            return "left";
+          }
+          // Right edge
+          if (j === grid[i].length - 1 || grid[i][j + 1] === null) {
+            return "right";
+          }
+        }
+      }
+    }
+    return null; // Return null if item not found
+  }
+
+  const doesLineCrossOtherElements = (arr2d: string[][], e1: string, e2: string): boolean => {
+    const findPosition = (element: string): [number, number] | null => {
+      for (let i = 0; i < arr2d.length; i++) {
+        for (let j = 0; j < arr2d[i].length; j++) {
+          if (arr2d[i][j] === element) {
+            return [i, j];
+          }
+        }
+      }
+      return null;
+    };
+
+    const pos1 = findPosition(e1);
+    const pos2 = findPosition(e2);
+
+    if (!pos1 || !pos2) return false;
+
+    const [x1, y1] = pos1;
+    const [x2, y2] = pos2;
+
+    // Check all elements between (x1, y1) and (x2, y2)
+    for (let i = 0; i < arr2d.length; i++) {
+      for (let j = 0; j < arr2d[i].length; j++) {
+        if ((i === x1 && j === y1) || (i === x2 && j === y2)) continue; // Skip e1 and e2
+
+        // Check if (i, j) is on the line passing through (x1, y1) and (x2, y2)
+        if ((x2 - x1) * (j - y1) === (y2 - y1) * (i - x1)) {
+          // Check if the point (i, j) is between (x1, y1) and (x2, y2)
+          if (
+            Math.min(x1, x2) <= i && i <= Math.max(x1, x2) &&
+            Math.min(y1, y2) <= j && j <= Math.max(y1, y2)
+          ) {
+            return true; // Another element is crossed
+          }
+        }
       }
     }
     return false;
   };
 
+  // check if two elements are next to each other in a 2d array (row-wise/col-wise/diagonal)
+  // const areElementsNextToEachOther = (arr2d: string[][], e1: string, e2: string) => {
+  //   const [r1, c1] = arr2d.reduce((acc, row, rowIndex) => {
+  //     const colIndex = row.indexOf(e1);
+  //     if (colIndex !== -1) {
+  //       acc = [rowIndex, colIndex];
+  //     }
+  //     return acc;
+  //   }, [-1, -1]);
+  //   return false;
+  // };
+
   const generate = () => {
     const acceptingStatesArray = acceptingStates.split(',').map(s => s.trim());
-    let code = `\\usepackage{tikz}\n\\usetikzlibrary{automata, arrows.meta, positioning}\n\\begin{document}\n\\begin{tikzpicture}`;
+    let code = `\\usepackage{tikz}\n\\usetikzlibrary{automata, arrows.meta, positioning}\n\\begin{document}\n`;
+
+    if (nodeFillColor) {
+      code += `\\definecolor{nodeFillColor}{HTML}{${nodeFillColor.replace('#', '')}}\n`;
+    }
+    if (nodeBorderColor) {
+      code += `\\definecolor{nodeBorderColor}{HTML}{${nodeBorderColor.replace('#', '')}}\n`;
+    }
+    if (edgeColor) {
+      code += `\\definecolor{edgeColor}{HTML}{${edgeColor.replace('#', '')}}\n`;
+    }
+
+    code += `\\begin{tikzpicture}`;
 
     // Style
     code += `[
@@ -124,77 +298,100 @@ const Generator: React.FC = () => {
       ${lineWidth},
       node distance=${nodeDistance}pt,
       >={${arrowType}},
-      ${initialWhere ? `initial text=${initialText},` : `initial text=,`} 
-      every state/.style={
-        draw=${nodeColor},
-        fill=${nodeColor}!20},
-      accepting/.style=${acceptingBy},
-      on grid]\n`;
+      ${initialWhere ? `initial text=${initialText},` : `initial text=,`}`;
+    // every state/.style={
+    //   draw=${nodeColor},
+    //   fill=${nodeColor}!20},
+    // `;
+
+    if (nodeFillColor || nodeBorderColor) {
+      code += `\nevery state/.style={`;
+      if (nodeFillColor) {
+        code += `fill=nodeFillColor,`;
+      }
+      if (nodeBorderColor) {
+        code += `draw=nodeBorderColor,`;
+      }
+      code += `},\n`;
+    }
+    if (edgeColor) {
+      code += `every edge/.style={draw=edgeColor},\n`;
+    }
+
+    if (acceptingBy === 'accepting by double') {
+      code += `accepting by double/.style={double, double distance=${doubleDistance}pt},\n`;
+    } else {
+      code += `accepting/.style=accepting by arrow,\n`;
+    }
+
+    code += `on grid]\n`;
+
+    // Generate transitions
+    const transitionsObj: Transitions = createTransitions(transitions);
+    // console.log(transitionsObj);
 
     // Generate nodes
     const statesArray = states.split(/,|;/).map(s => s.trim()).filter(s => s !== '');
-    const rows = states.split(';').map(row =>
-      row.split(',').map(s => s.trim()).filter(s => s !== '')
-    ).filter(row => row.length > 0);
 
+    // Auto layout
+    const optimalStatePlacement = findOptimalStatePlacement(statesArray, initialState, acceptingStatesArray, transitionsObj);
     let previousRowFirstState: string | null = null;
-
-    rows.forEach((row, rowIndex) => {
+    optimalStatePlacement.forEach((row, rowIndex) => {
       let previousState: string | null = null;
-
       row.forEach((state, colIndex) => {
-        let stateType = '';
-        if (state === initialState) {
-          stateType = `, initial${initialWhere ? ` ${initialWhere}` : ''}`;
-        }
-        if (acceptingStatesArray.includes(state)) {
-          stateType += ', accepting';
-        }
+        if (state) {
+          let stateType = state == initialState ? `, initial${initialWhere ? ` ${initialWhere}` : ''}` : '';
+          if (acceptingStatesArray.includes(state)) {
+            stateType += ', accepting';
+          }
+          // statePositions[state] = [colIndex * 2, -rowIndex * 2];
+          if (colIndex === 0 && rowIndex > 0 && previousRowFirstState) {
+            code += `\t\\node[state${stateType}] (${state}) [below of=${previousRowFirstState}] {$${state}$};\n`;
+            previousRowFirstState = state;
+          } else if (colIndex > 0 && previousState) {
+            code += `\t\\node[state${stateType}] (${state}) [right of=${previousState}] {$${state}$};\n`;
+          } else {
+            code += `\t\\node[state${stateType}] (${state}) {$${state}$};\n`;
+            previousRowFirstState = state;
+          }
+          previousState = state;
 
-        if (colIndex === 0 && rowIndex > 0 && previousRowFirstState) {
-          // First state of a new row, place it below the first state of the previous row
-          code += `    \\node[state${stateType}] (${state}) [below of=${previousRowFirstState}] {$${state}$};\n`;
-          previousRowFirstState = state;
-        } else if (colIndex > 0 && previousState) {
-          // Place to the right of the previous state in the row
-          code += `    \\node[state${stateType}] (${state}) [right of=${previousState}] {$${state}$};\n`;
-        } else {
-          // First state of the first row
-          code += `    \\node[state${stateType}] (${state}) {$${state}$};\n`;
-          previousRowFirstState = state;
         }
-
-        previousState = state;
       });
     });
-
-    // Generate transitions
-    const transitionsObj = createTransitions(transitions);
-    console.log(transitionsObj);
-
 
 
     statesArray.forEach((fromState, fromIndex) => {
       statesArray.forEach((toState, toIndex) => {
         // Loops
         if (fromState === toState && checkTransition(transitionsObj, fromState, toState)) {
-          const nextIndex = toIndex + 1;
-          const previousIndex = toIndex - 1;
-          if (nextIndex < statesArray.length && checkConnection(transitionsObj, fromState, statesArray[nextIndex]) === 0) {
-            code += `    \\draw (${fromState}) edge[loop right, ->] node{${checkTransition(transitionsObj, fromState, toState)}} (${fromState});\n`;
-          } else if (previousIndex >= 0 && checkConnection(transitionsObj, fromState, statesArray[previousIndex]) === 0) {
-            code += `    \\draw (${fromState}) edge[loop left, ->] node{${checkTransition(transitionsObj, fromState, toState)}} (${fromState});\n`;
-          } else {
-            code += `    \\draw (${fromState}) edge[loop below,->] node{${checkTransition(transitionsObj, fromState, toState)}} (${fromState});\n`;
-          }
+
+          // NEW
+          // if the state is on the edge of the grid (top, right, bottom, left) then draw the loop in the opposite direction
+          const loopPos = getEdge(optimalStatePlacement, fromState) || 'below';
+          code += `    \\draw (${fromState}) edge[loop ${loopPos}, ->] node[auto]{${checkTransition(transitionsObj, fromState, toState)}} (${fromState});\n`;
+         
+
+
+
+
+
+          // OLD
+          // if (nextIndex < statesArray.length && checkConnection(transitionsObj, fromState, statesArray[nextIndex]) === 0) {
+          //   code += `    \\draw (${fromState}) edge[loop right, ->] node{${checkTransition(transitionsObj, fromState, toState)}} (${fromState});\n`;
+          // } else if (previousIndex >= 0 && checkConnection(transitionsObj, fromState, statesArray[previousIndex]) === 0) {
+          //   code += `    \\draw (${fromState}) edge[loop left, ->] node{${checkTransition(transitionsObj, fromState, toState)}} (${fromState});\n`;
+          // } else {
+          //   code += `    \\draw (${fromState}) edge[loop below,->] node{${checkTransition(transitionsObj, fromState, toState)}} (${fromState});\n`;
+          // }
         } else if (checkTransition(transitionsObj, fromState, toState)) {
-          if (areElementsNextToEachOther(statesArray, fromState, toState) && checkConnection(transitionsObj, fromState, toState) === 1) {
-            code += `    \\draw (${fromState}) edge [above, ->] node{${checkTransition(transitionsObj, fromState, toState)}} (${toState});\n`;
+          if (!doesLineCrossOtherElements(optimalStatePlacement, fromState, toState) && checkConnection(transitionsObj, fromState, toState) === 1) {
+            code += `    \\draw (${fromState}) edge [above, ->] node[auto]{${checkTransition(transitionsObj, fromState, toState)}} (${toState});\n`;
           } else {
             if (fromIndex > toIndex) {
-              code += `    \\draw (${fromState}) edge[bend right, above, ->] node{${checkTransition(transitionsObj, fromState, toState)}} (${toState});\n`;
+              code += `    \\draw (${fromState}) edge[bend right, above, ->] node[auto]{${checkTransition(transitionsObj, fromState, toState)}} (${toState});\n`;
             } else {
-              code += `    \\draw (${fromState}) edge[bend right, below, ->] node{${checkTransition(transitionsObj, fromState, toState)}} (${toState});\n`;
+              code += `    \\draw (${fromState}) edge[bend right, below, ->] node[auto]{${checkTransition(transitionsObj, fromState, toState)}} (${toState});\n`;
             }
           }
         }
@@ -289,7 +486,7 @@ const Generator: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label htmlFor="states">
-              States: <code className="text-gray-500">state1, state2, ...</code>
+              States: <code className="text-gray-600">state1, state2, ...</code>
             </label>
             <input
               className="w-full p-2 border border-gray-300 rounded-lg"
@@ -298,7 +495,6 @@ const Generator: React.FC = () => {
               value={states}
               onChange={(e) => setStates(e.target.value)}
             />
-            <br />(use <code className="text-gray-500">;</code> for row break)
           </div>
           <div>
             <label htmlFor="initialState">
@@ -326,7 +522,7 @@ const Generator: React.FC = () => {
           </div>
         </div>
         <label htmlFor="transitions">
-          Transitions: <code className="text-gray-500">fromState, symbol1, ... , toState; ...</code>
+          Transitions: <code className="text-gray-600">fromState, symbol1, ... , toState; ...</code>
         </label>
         <Editor
           id="transitions-editor"
@@ -430,6 +626,20 @@ const Generator: React.FC = () => {
             </select>
           </div>
           <div>
+            <label htmlFor="doubleDistance">
+              Double Distance:
+            </label>
+            <input
+              className="w-full p-2 border border-gray-300 rounded-lg"
+              type="number"
+              step="0.5"
+              min="0.0"
+              id="doubleDistance"
+              value={doubleDistance}
+              onChange={(e) => setDoubleDistance(parseFloat(e.target.value))}
+            />
+          </div>
+          <div>
             <label htmlFor="arrowType">
               Arrow Type:
             </label>
@@ -445,14 +655,38 @@ const Generator: React.FC = () => {
           </div>
           <div>
             <label htmlFor="nodeColor">
-              Node Color:
+              Node Fill Color:
             </label>
             <input
-              className="w-full p-2 border border-gray-300 rounded-lg"
-              type="text"
-              id="nodeColor"
-              value={nodeColor}
-              onChange={(e) => setNodeColor(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg"
+              type="color"
+              id="nodeFillColor"
+              value={nodeFillColor || ''}
+              onChange={(e) => setNodeFillColor(e.target.value)}
+            />
+          </div>
+          <div>
+            <label htmlFor="nodeBorderColor">
+              Node Border Color:
+            </label>
+            <input
+              className="w-full border border-gray-300 rounded-lg"
+              type="color"
+              id="nodeBorderColor"
+              value={nodeBorderColor || ''}
+              onChange={(e) => setNodeBorderColor(e.target.value)}
+            />
+          </div>
+          <div>
+            <label htmlFor="edgeColor">
+              Edge Color:
+            </label>
+            <input
+              className="w-full border border-gray-300 rounded-lg"
+              type="color"
+              id="edgeColor"
+              value={edgeColor || ''}
+              onChange={(e) => setEdgeColor(e.target.value)}
             />
           </div>
           <div>
@@ -472,7 +706,7 @@ const Generator: React.FC = () => {
           </div>
         </div>
       </form>
-      <div id="tikzDiagram" ref={tikzDiagramRef} className="mt-6 p-4 bg-white shadow-md rounded-lg flex justify-center"></div>
+      <div id="tikzDiagram" ref={tikzDiagramRef} className={`${loading ? 'loading' : ''} mt-6 p-4 bg-white shadow-md rounded-lg flex justify-center`} ></div>
       <div className="flex justify-center space-x-4 mt-4">
         <button
           className="px-4 py-2 bg-blue-500 text-white rounded-lg shadow hover:bg-blue-600 cursor-pointer"
