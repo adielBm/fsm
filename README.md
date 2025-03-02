@@ -7,3 +7,8 @@ Generate [TikZ](https://en.wikipedia.org/wiki/PGF/TikZ) (with [automata](https:/
 - source is on `main` branch
 - static is on `gh-pages` branch, (run `npm run deploy` to deploy)
 
+___
+
+- related projects: 
+    - Finite State Machine Designer https://github.com/evanw/fsm
+    - https://github.com/ghallak/regex-to-dfa

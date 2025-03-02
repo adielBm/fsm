@@ -147,7 +147,7 @@ const Generator: React.FC = () => {
     }, 500); // Adjust delay as needed (e.g., 300-500ms)
 
     return () => clearTimeout(handler); // Cleanup timeout on each keystroke
-  }, [states, initialState, acceptingStates, transitions, nodeDistance, innerSep, bendAngle, shorten, initialText, initialWhere, acceptingBy,doubleDistance,arrowType, nodeFillColor, lineWidth, nodeBorderColor, edgeColor]);
+  }, [states, initialState, acceptingStates, transitions, nodeDistance, innerSep, bendAngle, shorten, initialText, initialWhere, acceptingBy, doubleDistance, arrowType, nodeFillColor, lineWidth, nodeBorderColor, edgeColor]);
 
 
   const createTransitions = (transitionString: string): Transitions => {
@@ -274,6 +274,14 @@ const Generator: React.FC = () => {
   //   return false;
   // };
 
+  const formatState = (str: string) => {
+    const pattern = /^[A-Za-z](\d+)?$/; // Matches a letter followed by optional digits
+    if (pattern.test(str) && str.length >=2) {
+      return `$${str[0]}_{${str.slice(1)}}$`; // Format as LaTeX
+    }
+    return `$${str}$`; // Default format
+  }
+
   const generate = () => {
     const acceptingStatesArray = acceptingStates.split(',').map(s => s.trim());
     let code = `\\usepackage{tikz}\n\\usetikzlibrary{automata, arrows.meta, positioning}\n\\begin{document}\n`;
@@ -346,12 +354,12 @@ const Generator: React.FC = () => {
           }
           // statePositions[state] = [colIndex * 2, -rowIndex * 2];
           if (colIndex === 0 && rowIndex > 0 && previousRowFirstState) {
-            code += `\t\\node[state${stateType}] (${state}) [below of=${previousRowFirstState}] {$${state}$};\n`;
+            code += `\t\\node[state${stateType}] (${state}) [below of=${previousRowFirstState}] {${formatState(state)}};\n`;
             previousRowFirstState = state;
           } else if (colIndex > 0 && previousState) {
-            code += `\t\\node[state${stateType}] (${state}) [right of=${previousState}] {$${state}$};\n`;
+            code += `\t\\node[state${stateType}] (${state}) [right of=${previousState}] {${formatState(state)}};\n`;
           } else {
-            code += `\t\\node[state${stateType}] (${state}) {$${state}$};\n`;
+            code += `\t\\node[state${stateType}] (${state}) {${formatState(state)}};\n`;
             previousRowFirstState = state;
           }
           previousState = state;
@@ -370,7 +378,7 @@ const Generator: React.FC = () => {
           // if the state is on the edge of the grid (top, right, bottom, left) then draw the loop in the opposite direction
           const loopPos = getEdge(optimalStatePlacement, fromState) || 'below';
           code += `    \\draw (${fromState}) edge[loop ${loopPos}, ->] node[auto]{${checkTransition(transitionsObj, fromState, toState)}} (${fromState});\n`;
-         
+
 
 
 
