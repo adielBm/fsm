@@ -1,12 +1,13 @@
 import './App.css'
 import Generator from './Generator'
+import { BrowserRouter } from 'react-router-dom';
 
 function App() {
 
   return (
-    <>
-      <Generator />
-    </>
+      <BrowserRouter>
+        <Generator />
+      </BrowserRouter>
   )
 }
 

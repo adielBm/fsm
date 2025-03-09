@@ -7,6 +7,8 @@ import "prismjs/themes/prism.css";
 import { highlight, languages } from 'prismjs';
 import 'prismjs/components/prism-latex';
 import 'prismjs/components/prism-ada';
+import { useLocation } from 'react-router-dom';
+import { useNavigate } from "react-router-dom";
 
 interface Transition {
   [symbol: string]: string[];
@@ -32,7 +34,7 @@ function calculateTransitionCost(statePositions: Record<string, [number, number]
         if (fromState in statePositions && toState in statePositions) {
           const [x1, y1] = statePositions[fromState];
           const [x2, y2] = statePositions[toState];
-          totalCost += Math.abs(x1 - x2) + Math.abs(y1 - y2); // Manhattan Distance
+          totalCost += Math.abs(x1 - x2) + Math.abs(y1 - y2);
         }
       }
     }
@@ -61,12 +63,7 @@ function findOptimalStatePlacement(states: string[], initState: string, acceptin
       grid[row][col] = state;
       statePositions[state] = [row, col];
     });
-
-    if (count % 1000 === 0) {
-      console.log('count', count);
-      console.log('grid');
-      console.log(grid);
-    }
+  
     count++;
 
     // Check if the initial state is on the some leftmost column of some row, if not, ignore this permutation
@@ -90,9 +87,40 @@ function findOptimalStatePlacement(states: string[], initState: string, acceptin
     }
   }
 
-  return bestGrid;
+  return bestGrid.filter(row => row.some(cell => cell !== null));
+  // return bestGrid;
 }
 
+
+function bendDirection(fromState: string, toState: string, grid: string[][]): string {
+  const [fromRow, fromCol] = grid.reduce((acc, row, rowIndex) => {
+    const colIndex = row.indexOf(fromState);
+    if (colIndex !== -1) {
+      acc = [rowIndex, colIndex];
+    }
+    return acc;
+  }
+    , [-1, -1]);
+  const [toRow, toCol] = grid.reduce((acc, row, rowIndex) => {
+    const colIndex = row.indexOf(toState);
+    if (colIndex !== -1) {
+      acc = [rowIndex, colIndex];
+    }
+    return acc;
+  }
+
+    , [-1, -1]);
+  if (fromRow === toRow && fromRow === 0) {
+    return fromCol < toCol ? 'left' : 'right';
+  } else if (fromRow === toRow && fromRow === grid.length - 1) {
+    return fromCol < toCol ? 'right' : 'left';
+  } else if (fromCol === toCol && fromCol === 0) {
+    return fromRow < toRow ? 'right' : 'left';
+  } else if (fromCol === toCol && fromCol === grid[0].length - 1) {
+    return fromRow < toRow ? 'left' : 'right';
+  }
+  return 'right';
+}
 
 const Generator: React.FC = () => {
   const [states, setStates] = useState<string>('q1, q2, q3, q4');
@@ -119,10 +147,35 @@ const Generator: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const tikzDiagramRef = useRef<HTMLDivElement>(null);
 
+
+  // react-router-dom
+  const location = useLocation();
+  const nav = useNavigate();
+
+  // Update input values based on URL parameters
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    setStates(params.get('states') || 'q1, q2, q3, q4');
+    setInitialState(params.get('initialState') || 'q1');
+    setAcceptingStates(params.get('acceptingStates') || 'q3,q2');
+    setTransitions(params.get('transitions') || 'q3, 1, q2;\nq1, 0, 1, q1;\nq1, 1, q2;\nq2, 0, 1, q3;\nq3, 0, 1, q4;\nq4, 0, 1, q4;\nq2, 1, q4;');
+  }, [location.search]);
+
+  // Update URL parameters based on input values
+  const updateURL = () => {
+    const params = new URLSearchParams();
+    params.set('states', states);
+    params.set('initialState', initialState);
+    params.set('acceptingStates', acceptingStates);
+    params.set('transitions', transitions);
+    nav({ search: params.toString() });
+  }
+
   useEffect(() => {
     setLoading(true);
     const handler = setTimeout(() => {
       renderTikz(tikzCode);
+      updateURL();
       setLoading(false);
     }, 1000);
     return () => clearTimeout(handler);
@@ -276,7 +329,7 @@ const Generator: React.FC = () => {
 
   const formatState = (str: string) => {
     const pattern = /^[A-Za-z](\d+)?$/; // Matches a letter followed by optional digits
-    if (pattern.test(str) && str.length >=2) {
+    if (pattern.test(str) && str.length >= 2) {
       return `$${str[0]}_{${str.slice(1)}}$`; // Format as LaTeX
     }
     return `$${str}$`; // Default format
@@ -368,39 +421,26 @@ const Generator: React.FC = () => {
       });
     });
 
-
+    // store pair of states that are connected by a bend-edge with the direction of the bend 
+    // so that we can bend the next edge (if there is any) in the opposite direction
+    // right=>left, left=>right;
+    // const bendDirectionArray[fromState][toState] = 'right' | 'left' | '';
+    const bendDirectionArray: string[][] = Array.from({ length: statesArray.length }, () => Array(statesArray.length).fill(''));
     statesArray.forEach((fromState, fromIndex) => {
       statesArray.forEach((toState, toIndex) => {
         // Loops
         if (fromState === toState && checkTransition(transitionsObj, fromState, toState)) {
-
-          // NEW
-          // if the state is on the edge of the grid (top, right, bottom, left) then draw the loop in the opposite direction
           const loopPos = getEdge(optimalStatePlacement, fromState) || 'below';
           code += `    \\draw (${fromState}) edge[loop ${loopPos}, ->] node[auto]{${checkTransition(transitionsObj, fromState, toState)}} (${fromState});\n`;
-
-
-
-
-
-
-          // OLD
-          // if (nextIndex < statesArray.length && checkConnection(transitionsObj, fromState, statesArray[nextIndex]) === 0) {
-          //   code += `    \\draw (${fromState}) edge[loop right, ->] node{${checkTransition(transitionsObj, fromState, toState)}} (${fromState});\n`;
-          // } else if (previousIndex >= 0 && checkConnection(transitionsObj, fromState, statesArray[previousIndex]) === 0) {
-          //   code += `    \\draw (${fromState}) edge[loop left, ->] node{${checkTransition(transitionsObj, fromState, toState)}} (${fromState});\n`;
-          // } else {
-          //   code += `    \\draw (${fromState}) edge[loop below,->] node{${checkTransition(transitionsObj, fromState, toState)}} (${fromState});\n`;
-          // }
         } else if (checkTransition(transitionsObj, fromState, toState)) {
           if (!doesLineCrossOtherElements(optimalStatePlacement, fromState, toState) && checkConnection(transitionsObj, fromState, toState) === 1) {
             code += `    \\draw (${fromState}) edge [above, ->] node[auto]{${checkTransition(transitionsObj, fromState, toState)}} (${toState});\n`;
           } else {
-            if (fromIndex > toIndex) {
-              code += `    \\draw (${fromState}) edge[bend right, above, ->] node[auto]{${checkTransition(transitionsObj, fromState, toState)}} (${toState});\n`;
-            } else {
-              code += `    \\draw (${fromState}) edge[bend right, below, ->] node[auto]{${checkTransition(transitionsObj, fromState, toState)}} (${toState});\n`;
-            }
+            const bD = bendDirectionArray[fromIndex][toIndex] || bendDirection(fromState, toState, optimalStatePlacement);
+            bendDirectionArray[fromIndex][toIndex] = bD;
+            bendDirectionArray[toIndex][fromIndex] = bD;
+            code += `    \\draw (${fromState}) edge[bend ${bD}, `
+            code += `${fromIndex > toIndex ? 'above' : "below"}, ->] node[auto]{${checkTransition(transitionsObj, fromState, toState)}} (${toState});\n`;
           }
         }
       });
@@ -722,7 +762,7 @@ const Generator: React.FC = () => {
           id="copyToClipboard"
           onClick={copyToClipboard}
         >
-          Copy to Clipboard
+          Copy Code to Clipboard
         </button>
         <button
           className="px-4 py-2 bg-green-500 text-white rounded-lg shadow hover:bg-green-600 cursor-pointer"
