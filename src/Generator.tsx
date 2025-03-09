@@ -181,7 +181,6 @@ const Generator: React.FC = () => {
 
   const [lineWidth, setLineWidth] = useState<string>('thick');
   const [tikzCode, setTikzCode] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(false);
   const tikzDiagramRef = useRef<HTMLDivElement>(null);
 
 
@@ -209,11 +208,9 @@ const Generator: React.FC = () => {
   }
 
   useEffect(() => {
-    setLoading(true);
     const handler = setTimeout(() => {
       renderTikz(tikzCode);
       updateURL();
-      setLoading(false);
     }, 1000);
     return () => clearTimeout(handler);
   }, [tikzCode]);
@@ -231,7 +228,6 @@ const Generator: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    setLoading(true);
     const handler = setTimeout(() => {
       generate(); // Run generate() after user stops typing
     }, 500); // Adjust delay as needed (e.g., 300-500ms)
