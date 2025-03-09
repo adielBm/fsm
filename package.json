@@ -1,9 +1,9 @@
 {
-  "name": "dfa",
+  "name": "fsm",
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "https://adielBm.github.io/dfa",
+  "homepage": "https://adielBm.github.io/fsm",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

@@ -835,11 +835,11 @@ const Generator: React.FC = () => {
       <footer className="text-center m-8 text-gray-500">
         <div>
           source code: <a
-            href="https://github.com/adielBm/dfa/"
+            href="https://github.com/adielBm/fsm/"
             target="_blank"
             rel="noopener noreferrer"
           >
-            github.com/adielBm/dfa
+            github.com/adielBm/fsm
           </a>
         </div>
 
