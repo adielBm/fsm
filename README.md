@@ -9,6 +9,8 @@ Generate [TikZ](https://en.wikipedia.org/wiki/PGF/TikZ) (with [automata](https:/
 
 ___
 
-- related projects: 
-    - Finite State Machine Designer https://github.com/evanw/fsm
-    - https://github.com/ghallak/regex-to-dfa
+related/similar projects: 
+
+- https://github.com/evanw/fsm
+- https://github.com/ghallak/regex-to-dfa
+- https://github.com/joeylemon/nfa-to-dfa

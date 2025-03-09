@@ -25,6 +25,23 @@ function getPermutations<T>(arr: T[]): T[][] {
   );
 }
 
+function getPossibleGridSizes(n: number): number[][] {
+  const result = [];
+
+  // Find all pairs where rows * cols >= n
+  // We'll go up to n for both dimensions as a reasonable limit
+  for (let rows = 1; rows <= n; rows++) {
+    for (let cols = 1; cols <= n; cols++) {
+      // Only include the table if it can fit exactly n elements
+      // or has just one empty cell (for cases like n=3 in a 2x2 table)
+      if (rows * cols === n || rows * cols === n + 1) {
+        result.push([rows, cols]);
+      }
+    }
+  }
+  return result;
+}
+
 function calculateTransitionCost(statePositions: Record<string, [number, number]>, transitions: Record<string, Record<string, string[]>>): number {
   let totalCost = 0;
 
@@ -42,57 +59,67 @@ function calculateTransitionCost(statePositions: Record<string, [number, number]
   return totalCost;
 }
 
-function findOptimalStatePlacement(states: string[], initState: string, acceptingStates: string[], transitions: Record<string, Record<string, string[]>>): string[][] {
+function findOptimalStatePlacement(
+  states: string[],
+  initState: string,
+  acceptingStates: string[],
+  transitions: Record<string, Record<string, string[]>>,
+  accToRight: boolean
+): string[][] {
   const n = states.length;
-  const gridSize = Math.ceil(Math.sqrt(n));
-
-  const allPermutations = getPermutations(states)
+  const allPermutations = getPermutations(states);
+  const availableGridSizes = getPossibleGridSizes(n);
 
   let bestGrid: string[][] = [];
   let minCost = Infinity;
 
-  let count = 0;
+  for (const [rows, cols] of availableGridSizes) {
+    for (const perm of allPermutations) {
+      const grid: string[][] = Array.from({ length: rows }, () => Array(cols).fill(null));
+      const statePositions: Record<string, [number, number]> = {};
 
-  for (const perm of allPermutations) {
-    const grid: string[][] = Array.from({ length: gridSize }, () => Array(gridSize).fill(null));
-    const statePositions: Record<string, [number, number]> = {};
+      // Place states in the grid row-wise
+      for (let i = 0; i < perm.length; i++) {
+        const row = Math.floor(i / cols);
+        const col = i % cols;
+        if (row < rows && col < cols) {
+          grid[row][col] = perm[i];
+          statePositions[perm[i]] = [row, col];
+        }
+      }
 
-    perm.forEach((state, index) => {
-      const row = Math.floor(index / gridSize);
-      const col = index % gridSize;
-      grid[row][col] = state;
-      statePositions[state] = [row, col];
-    });
-  
-    count++;
+      // Ensure the initial state is in a leftmost column of some row
+      if (!grid.some(row => row[0] === initState)) continue;
 
-    // Check if the initial state is on the some leftmost column of some row, if not, ignore this permutation
-    if (!grid.some(row => row[0] === initState)) continue;
-    // Check if not(every non-null-rightmost element of each row is an accepting state) && (some row has accepting state as element that is not non-null-rightmost element)
-    if (!grid.every((row) => {
-      // first find the rightmost element of the row that is not null, if there is no such element, return true
-      const rightmost = row.findLastIndex(cell => cell !== null);
-      return acceptingStates.includes(row[rightmost]) || rightmost === -1;
-    }) && grid.some((row) => {
-      const rightmost = row.findLastIndex(cell => cell !== null);
-      // loop through the row from 0 to rightmost (exclusive) and check if there is an accepting state
-      if (rightmost === -1) return false;
-      return row.slice(0, rightmost).some(cell => acceptingStates.includes(cell) && cell !== initState);
-    })) continue;
+      // Handle accToRight constraint
+      if (accToRight) {
+        if (
+          !grid.every((row) => {
+            const rightmost = row.findLastIndex(cell => cell !== null);
+            return rightmost === -1 || acceptingStates.includes(row[rightmost]);
+          }) &&
+          grid.some((row) => {
+            const rightmost = row.findLastIndex(cell => cell !== null);
+            return rightmost !== -1 && row.slice(0, rightmost).some(cell => acceptingStates.includes(cell) && cell !== initState);
+          })
+        ) continue;
+      }
 
-    const cost = calculateTransitionCost(statePositions, transitions);
-    if (cost < minCost) {
-      minCost = cost;
-      bestGrid = grid;
+      // Calculate transition cost
+      const cost = calculateTransitionCost(statePositions, transitions);
+      if (cost < minCost) {
+        minCost = cost;
+        bestGrid = grid;
+      }
     }
   }
 
   return bestGrid.filter(row => row.some(cell => cell !== null));
-  // return bestGrid;
 }
 
 
-function bendDirection(fromState: string, toState: string, grid: string[][]): string {
+
+function bendDirection(fromState: string, toState: string, grid: string[][]): string[] {
   const [fromRow, fromCol] = grid.reduce((acc, row, rowIndex) => {
     const colIndex = row.indexOf(fromState);
     if (colIndex !== -1) {
@@ -111,15 +138,24 @@ function bendDirection(fromState: string, toState: string, grid: string[][]): st
 
     , [-1, -1]);
   if (fromRow === toRow && fromRow === 0) {
-    return fromCol < toCol ? 'left' : 'right';
+    return fromCol < toCol ? ['left', 'above'] : ['right', 'above'];
   } else if (fromRow === toRow && fromRow === grid.length - 1) {
-    return fromCol < toCol ? 'right' : 'left';
+    return fromCol < toCol ? ['right', 'below'] : ['left', 'below'];
   } else if (fromCol === toCol && fromCol === 0) {
-    return fromRow < toRow ? 'right' : 'left';
+    return fromRow < toRow ? ['right', 'right'] : ['left', 'left'];
   } else if (fromCol === toCol && fromCol === grid[0].length - 1) {
-    return fromRow < toRow ? 'left' : 'right';
+    return fromRow < toRow ? ['left', 'right'] : ['right', 'left'];
   }
-  return 'right';
+  return fromCol < toCol ? ['right', 'right'] : ['left', 'left'];
+}
+
+function formatSymbol(symbol: string, style: string): string {
+  if (style === 'italic') {
+    return `$${symbol}$`;
+  } else if (style === 'mono') {  // monospace
+    return `\\texttt{${symbol}}`;
+  }
+  return symbol;
 }
 
 const Generator: React.FC = () => {
@@ -137,6 +173,7 @@ const Generator: React.FC = () => {
   const [acceptingBy, setAcceptingBy] = useState<string>('accepting by double');
   const [doubleDistance, setDoubleDistance] = useState<number>(1.5);
   const [arrowType, setArrowType] = useState<string>('Stealth[round]');
+  const [symbolsStyle, setSymbolsStyle] = useState<string>('mono');
   // colors
   const [nodeFillColor, setNodeFillColor] = useState<string | null>('f0f0f0')
   const [nodeBorderColor, setNodeBorderColor] = useState<string | null>(null)
@@ -200,7 +237,7 @@ const Generator: React.FC = () => {
     }, 500); // Adjust delay as needed (e.g., 300-500ms)
 
     return () => clearTimeout(handler); // Cleanup timeout on each keystroke
-  }, [states, initialState, acceptingStates, transitions, nodeDistance, innerSep, bendAngle, shorten, initialText, initialWhere, acceptingBy, doubleDistance, arrowType, nodeFillColor, lineWidth, nodeBorderColor, edgeColor]);
+  }, [states, initialState, acceptingStates, transitions, nodeDistance, innerSep, bendAngle, shorten, initialText, initialWhere, acceptingBy, doubleDistance, arrowType, nodeFillColor, lineWidth, nodeBorderColor, edgeColor, symbolsStyle]);
 
 
   const createTransitions = (transitionString: string): Transitions => {
@@ -225,8 +262,8 @@ const Generator: React.FC = () => {
     return transitions;
   };
 
-  const checkTransition = (transitions: Transitions, s1: string, s2: string) => {
-    const symbols: string[] = [];
+  const checkTransition = (transitions: Transitions, s1: string, s2: string): string[] | null => {
+    let symbols: string[] = [];
     if (transitions[s1]) {
       for (const symbol in transitions[s1]) {
         if (transitions[s1][symbol].includes(s2)) {
@@ -234,7 +271,9 @@ const Generator: React.FC = () => {
         }
       }
     }
-    return symbols.length > 0 ? symbols.join(',') : false;
+    symbols = symbols.map(s => s.split(',')).flat();
+
+    return symbols.length > 0 ? symbols.sort() : null;
   };
 
   const checkConnection = (transitions: Transitions, stateA: string, stateB: string) => {
@@ -337,7 +376,9 @@ const Generator: React.FC = () => {
 
   const generate = () => {
     const acceptingStatesArray = acceptingStates.split(',').map(s => s.trim());
-    let code = `\\usepackage{tikz}\n\\usetikzlibrary{automata, arrows.meta, positioning}\n\\begin{document}\n`;
+    let code = '';
+    code += `% Generated by ${window.location.href}\n`;
+    code += `\\usepackage{tikz}\n\\usetikzlibrary{automata, arrows.meta, positioning}\n\\begin{document}\n`;
 
     if (nodeFillColor) {
       code += `\\definecolor{nodeFillColor}{HTML}{${nodeFillColor.replace('#', '')}}\n`;
@@ -395,7 +436,7 @@ const Generator: React.FC = () => {
     const statesArray = states.split(/,|;/).map(s => s.trim()).filter(s => s !== '');
 
     // Auto layout
-    const optimalStatePlacement = findOptimalStatePlacement(statesArray, initialState, acceptingStatesArray, transitionsObj);
+    const optimalStatePlacement = findOptimalStatePlacement(statesArray, initialState, acceptingStatesArray, transitionsObj, acceptingBy === 'accepting by arrow');
     let previousRowFirstState: string | null = null;
     optimalStatePlacement.forEach((row, rowIndex) => {
       let previousState: string | null = null;
@@ -407,12 +448,12 @@ const Generator: React.FC = () => {
           }
           // statePositions[state] = [colIndex * 2, -rowIndex * 2];
           if (colIndex === 0 && rowIndex > 0 && previousRowFirstState) {
-            code += `\t\\node[state${stateType}] (${state}) [below of=${previousRowFirstState}] {${formatState(state)}};\n`;
+            code += `\t\\node[state${stateType}] (${state.replace('\\', '')}) [below of=${previousRowFirstState.replace('\\', '')}] {${formatState(state)}};\n`;
             previousRowFirstState = state;
           } else if (colIndex > 0 && previousState) {
-            code += `\t\\node[state${stateType}] (${state}) [right of=${previousState}] {${formatState(state)}};\n`;
+            code += `\t\\node[state${stateType}] (${state.replace('\\', '')}) [right of=${previousState.replace('\\', '')}] {${formatState(state)}};\n`;
           } else {
-            code += `\t\\node[state${stateType}] (${state}) {${formatState(state)}};\n`;
+            code += `\t\\node[state${stateType}] (${state.replace('\\', '')}) {${formatState(state)}};\n`;
             previousRowFirstState = state;
           }
           previousState = state;
@@ -421,26 +462,24 @@ const Generator: React.FC = () => {
       });
     });
 
-    // store pair of states that are connected by a bend-edge with the direction of the bend 
-    // so that we can bend the next edge (if there is any) in the opposite direction
-    // right=>left, left=>right;
-    // const bendDirectionArray[fromState][toState] = 'right' | 'left' | '';
     const bendDirectionArray: string[][] = Array.from({ length: statesArray.length }, () => Array(statesArray.length).fill(''));
     statesArray.forEach((fromState, fromIndex) => {
       statesArray.forEach((toState, toIndex) => {
         // Loops
         if (fromState === toState && checkTransition(transitionsObj, fromState, toState)) {
           const loopPos = getEdge(optimalStatePlacement, fromState) || 'below';
-          code += `    \\draw (${fromState}) edge[loop ${loopPos}, ->] node[auto]{${checkTransition(transitionsObj, fromState, toState)}} (${fromState});\n`;
+          code += `    \\draw (${fromState.replace('\\', '')}) edge[loop ${loopPos}, ->]`;
+          code += `node[auto]{${checkTransition(transitionsObj, fromState, toState)?.map(symbol => formatSymbol(symbol, symbolsStyle)).join(', ')}} (${fromState.replace('\\', '')});\n`;
+          // Non-loops
         } else if (checkTransition(transitionsObj, fromState, toState)) {
           if (!doesLineCrossOtherElements(optimalStatePlacement, fromState, toState) && checkConnection(transitionsObj, fromState, toState) === 1) {
-            code += `    \\draw (${fromState}) edge [above, ->] node[auto]{${checkTransition(transitionsObj, fromState, toState)}} (${toState});\n`;
+            code += `    \\draw (${fromState.replace('\\', '')}) edge [above, ->] node[auto]{${checkTransition(transitionsObj, fromState, toState)?.map(s => formatSymbol(s, symbolsStyle)).join(', ')}} (${toState.replace('\\', '')});\n`;
           } else {
-            const bD = bendDirectionArray[fromIndex][toIndex] || bendDirection(fromState, toState, optimalStatePlacement);
+            const bD = bendDirectionArray[fromIndex][toIndex] || bendDirection(fromState, toState, optimalStatePlacement)[0]
             bendDirectionArray[fromIndex][toIndex] = bD;
             bendDirectionArray[toIndex][fromIndex] = bD;
-            code += `    \\draw (${fromState}) edge[bend ${bD}, `
-            code += `${fromIndex > toIndex ? 'above' : "below"}, ->] node[auto]{${checkTransition(transitionsObj, fromState, toState)}} (${toState});\n`;
+            code += `    \\draw (${fromState.replace('\\', '')}) edge[bend ${bD}, right, ->] `;
+            code += `node[${bendDirection(fromState, toState, optimalStatePlacement)[1]}]{${checkTransition(transitionsObj, fromState, toState)?.map(s => formatSymbol(s, symbolsStyle)).join(', ')}} (${toState.replace('\\', '')});\n`;
           }
         }
       });
@@ -752,9 +791,24 @@ const Generator: React.FC = () => {
               <option value="very thick">Very Thick</option>
             </select>
           </div>
+          <div>
+            <label htmlFor="symbolsStyle">
+              Symbols Style:
+            </label>
+            <select
+              className="w-full p-2 border border-gray-300 rounded-lg"
+              id="symbolsStyle"
+              value={symbolsStyle}
+              onChange={(e) => setSymbolsStyle(e.target.value)}
+            >
+              <option value="mono">mono (texttt)</option>
+              <option value="roman">roamn</option>
+              <option value="italic">italic</option>
+            </select>
+          </div>
         </div>
       </form>
-      <div id="tikzDiagram" ref={tikzDiagramRef} className={`${loading ? 'loading' : ''} mt-6 p-4 bg-white shadow-md rounded-lg flex justify-center`} ></div>
+      <div id="tikzDiagram" ref={tikzDiagramRef} className={`mt-6 p-4 bg-white shadow-md rounded-lg flex justify-center`} ></div>
       <div className="flex justify-center space-x-4 mt-4">
         <button
           className="px-4 py-2 bg-blue-500 text-white rounded-lg shadow hover:bg-blue-600 cursor-pointer"
